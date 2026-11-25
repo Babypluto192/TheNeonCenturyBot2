@@ -1,6 +1,7 @@
 package cogs
 
 import (
+	"TheNeonCenturyBot2/Filters"
 	"TheNeonCenturyBot2/config"
 	"TheNeonCenturyBot2/storage"
 	"log"
@@ -22,12 +23,11 @@ func CleanHistory(db *gorm.DB) func(d *discordgo.Session, m *discordgo.MessageCr
 				d.ChannelMessageSend(m.ChannelID, "Wrong number of arguments use >ban userid or >ban @UserPing")
 				return
 			}
-			if !config.IsAdmin(d, m.Author.ID, m.ChannelID) {
-				d.ChannelMessageSend(m.ChannelID, "You are not allowed to use this command.")
+			if !Filters.IsAdminFilter(m.ChannelID, d, m.Author.ID) {
 				return
 			}
-			if !storage.IsChannelAllowed(db, m.ChannelID) {
-				d.ChannelMessageSend(m.ChannelID, "Messages in this channel are not allowed.")
+
+			if !Filters.IsChannelAllowedFilter(db, m.ChannelID, d) {
 				return
 			}
 
@@ -38,7 +38,7 @@ func CleanHistory(db *gorm.DB) func(d *discordgo.Session, m *discordgo.MessageCr
 			}
 
 			if targetID == d.State.User.ID {
-				d.ChannelMessageSend(m.ChannelID, "You can't clean the bot history.")
+				d.ChannelMessageSend(m.ChannelID, "You can't clear the bot history.")
 				return
 			}
 
@@ -58,7 +58,7 @@ func CleanHistory(db *gorm.DB) func(d *discordgo.Session, m *discordgo.MessageCr
 				return
 			}
 
-			d.ChannelMessageSend(m.ChannelID, "User questions reputation has been cleaned")
+			d.ChannelMessageSend(m.ChannelID, "User questions reputation has been cleared")
 		}
 	}
 

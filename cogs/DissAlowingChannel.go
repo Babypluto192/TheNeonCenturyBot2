@@ -1,6 +1,7 @@
 package cogs
 
 import (
+	"TheNeonCenturyBot2/Filters"
 	"TheNeonCenturyBot2/config"
 	"TheNeonCenturyBot2/storage"
 	"strings"
@@ -16,12 +17,11 @@ func DisAllowChannel(db *gorm.DB) func(d *discordgo.Session, m *discordgo.Messag
 		}
 
 		if strings.HasPrefix(m.Content, config.CommandPrefix+config.CommandDisallowChannelNew) {
-			if !config.IsAdmin(d, m.Author.ID, m.ChannelID) {
-				d.ChannelMessageSend(m.ChannelID, "You are not allowed to use this command.")
+			if !Filters.IsAdminFilter(m.ChannelID, d, m.Author.ID) {
 				return
 			}
-			if !storage.IsChannelAllowed(db, m.ChannelID) {
-				d.ChannelMessageSend(m.ChannelID, "This channel haven't been allowed")
+			if !Filters.IsChannelAllowedFilter(db, m.ChannelID, d) {
+				return
 			}
 			err := storage.DisAllowChannel(db, m.ChannelID)
 			if err != nil {

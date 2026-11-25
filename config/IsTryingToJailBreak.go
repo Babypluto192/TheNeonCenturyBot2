@@ -16,7 +16,7 @@ func IsTryingToJailBreak(db *gorm.DB, requests []string, userId string) bool {
 		}
 	}
 	var NotJailBreakRequestCount = len(requests) - JailBreakRequestCount
-	if JailBreakRequestCount > NotJailBreakRequestCount {
+	if JailBreakRequestCount > NotJailBreakRequestCount && len(requests) > 4 {
 		storage.BanUser(db, userId)
 		return true
 	}

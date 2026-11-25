@@ -1,6 +1,7 @@
 package cogs
 
 import (
+	"TheNeonCenturyBot2/Filters"
 	"TheNeonCenturyBot2/config"
 	"TheNeonCenturyBot2/storage"
 	"log"
@@ -42,12 +43,11 @@ func UnBanUser(db *gorm.DB) func(d *discordgo.Session, m *discordgo.MessageCreat
 				d.ChannelMessageSend(m.ChannelID, "Wrong number of arguments use >unban userid or >unban @UserPing")
 				return
 			}
-			if !config.IsAdmin(d, m.Author.ID, m.ChannelID) {
-				d.ChannelMessageSend(m.ChannelID, "You are not allowed to use this command.")
+			if !Filters.IsAdminFilter(m.ChannelID, d, m.Author.ID) {
 				return
 			}
-			if !storage.IsChannelAllowed(db, m.ChannelID) {
-				d.ChannelMessageSend(m.ChannelID, "Messages in this channel are not allowed.")
+
+			if !Filters.IsChannelAllowedFilter(db, m.ChannelID, d) {
 				return
 			}
 

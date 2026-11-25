@@ -29,6 +29,7 @@ func Help(d *discordgo.Session, m *discordgo.MessageCreate) {
 			Description: "Prefix for all commands is " + config.CommandPrefix + " Current commands : `" + config.CommandHelp + "`, `" + config.CommandAsk + "`",
 			Color:       0x5b209a,
 		})
+		return
 	}
 
 }

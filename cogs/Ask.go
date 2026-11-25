@@ -1,21 +1,24 @@
 package cogs
 
 import (
+	"TheNeonCenturyBot2/Filters"
 	"TheNeonCenturyBot2/config"
 	"TheNeonCenturyBot2/storage"
 	"log"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/revrost/go-openrouter"
 	"google.golang.org/genai"
 	"gorm.io/gorm"
 )
 
-func Ask(db *gorm.DB, ai *genai.Client) func(*discordgo.Session, *discordgo.MessageCreate) {
+func Ask(db *gorm.DB, ai *genai.Client, clients []*openrouter.Client) func(*discordgo.Session, *discordgo.MessageCreate) {
 	return func(d *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.Author.ID == d.State.User.ID {
+		if !Filters.AntiBotFilter(d, m.Author.ID) {
 			return
 		}
 
@@ -40,52 +43,68 @@ func Ask(db *gorm.DB, ai *genai.Client) func(*discordgo.Session, *discordgo.Mess
 			d.ChannelMessageSend(m.ChannelID, "Wrong number of arguments, use "+cmd+" question")
 			return
 		}
-		if !storage.IsChannelAllowed(db, m.ChannelID) {
-			d.ChannelMessageSend(m.ChannelID, "You are not allowed to use this command here")
-			return
-		}
-		if storage.IsUserBanned(db, m.Author.ID) {
-			d.ChannelMessageSend(m.ChannelID, "You are not allowed to use commands")
+		if !Filters.IsChannelAllowedFilter(db, m.ChannelID, d) {
 			return
 		}
 
-		if !storage.IsUserExist(db, m.Author.ID) {
-			isAdmin := config.IsAdmin(d, m.Author.ID, m.ChannelID)
-			storage.AddUser(db, m.Author.ID, false, isAdmin)
+		if !Filters.IsUserBannedFilter(db, m.Author.ID, d, m.ChannelID) {
+			return
 		}
 
-		if storage.IsUserExist(db, m.Author.ID) {
-			requests, err := storage.GetUserRequests(db, m.Author.ID)
-			if err != nil {
-				d.ChannelMessageSend(m.ChannelID, "There was an error getting the user requests")
-				return
-			}
-			isJailBreak := config.IsTryingToJailBreak(db, requests, m.Author.ID)
-			if isJailBreak && !config.IsAdmin(d, m.Author.ID, m.ChannelID) {
-				d.ChannelMessageSend(m.ChannelID, "You appear to be attempting to jailbreak the bot, you have been banned [bye byee](https://klipy.com/gifs/mai-sakurajima-rascal-does-not-dream-of-bunny-girl-senpai-3) ")
-			}
+		if !Filters.CreateUserFilter(db, m.ChannelID, d, m.Author.ID) {
+			return
 		}
 
+		if !Filters.AutoBanFilter(db, m.ChannelID, d, m.Author.ID) {
+			return
+		}
+
+		if config.IsDevServer(m.GuildID) {
+			log.Println(m.Author.Username, "asks", question)
+			stopTyping := startTyping(d, m.ChannelID)
+			response := config.GenerateResponse(m.GuildID, question, clients)
+			stopTyping()
+
+			const limit = 1900
+			responseMessage := []rune(response)
+			for i := 0; i < len(responseMessage); i += limit {
+				end := min(i+limit, len(responseMessage))
+				if _, err := d.ChannelMessageSend(m.ChannelID, string(responseMessage[i:end])); err != nil {
+					log.Println("ChannelMessageSend error:", err)
+					return
+				}
+			}
+
+			return
+		}
 		userFilteredQuestion := config.GeminiFitler(ai, config.FilterPrompt, question)
 
-		if userFilteredQuestion == "" {
-			log.Println("Something went wrong with filter")
-			d.ChannelMessageSend(m.ChannelID, "Something went wrong with filter, try again later")
+		if !Filters.GeminiFilterError(m.ChannelID, d, userFilteredQuestion) {
+			return
+		}
+
+		if !Filters.FilterJailBreakAttempt(db, m.ChannelID, d, userFilteredQuestion, m.Author.ID) {
 			return
 		}
 
 		if strings.Contains(userFilteredQuestion, "OK") {
+			log.Println(m.Author.Username, "asks", question)
 			err := storage.AddRequestToUser(db, m.Author.ID, userFilteredQuestion)
-			d.ChannelMessageSend(m.ChannelID, "Question Passed Filter")
-			if err != nil {
-				log.Println("AddRequestToUser error:", err)
-				return
+			stopTyping := startTyping(d, m.ChannelID)
+			response := config.GenerateResponse(m.GuildID, question, clients)
+			stopTyping()
+
+			const limit = 1900
+			responseMessage := []rune(response)
+			for i := 0; i < len(responseMessage); i += limit {
+				end := min(i+limit, len(responseMessage))
+				if _, err := d.ChannelMessageSend(m.ChannelID, string(responseMessage[i:end])); err != nil {
+					log.Println("ChannelMessageSend error:", err)
+					return
+				}
 			}
-			return
-		}
-		if strings.Contains(userFilteredQuestion, "429") {
-			err := storage.AddRequestToUser(db, m.Author.ID, userFilteredQuestion)
-			d.ChannelMessageSend(m.ChannelID, "Your question is not related to lore")
+
+			// d.ChannelMessageSend(m.ChannelID, "Question Passed Filter")an
 			if err != nil {
 				log.Println("AddRequestToUser error:", err)
 				return
@@ -95,5 +114,28 @@ func Ask(db *gorm.DB, ai *genai.Client) func(*discordgo.Session, *discordgo.Mess
 
 		return
 
+	}
+}
+
+func startTyping(d *discordgo.Session, channelID string) func() {
+	done := make(chan struct{})
+
+	go func() {
+		_ = d.ChannelTyping(channelID)
+		ticker := time.NewTicker(8 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				_ = d.ChannelTyping(channelID)
+			}
+		}
+	}()
+
+	return func() {
+		close(done)
 	}
 }
