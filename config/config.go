@@ -1,6 +1,6 @@
 package config
 
-const CommandPrefix = "!!"
+const CommandPrefix = ">"
 const CommandHelp = "help"
 const CommandAllowChannelNew = "allow_channel"
 const CommandDisallowChannelNew = "disallow_channel"
