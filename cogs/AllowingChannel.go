@@ -22,10 +22,6 @@ func AllowChannel(db *gorm.DB) func(d *discordgo.Session, m *discordgo.MessageCr
 				return
 			}
 
-			if !Filters.IsChannelAllowedFilter(db, m.ChannelID, d) {
-				return
-			}
-
 			d.ChannelMessageSend(m.ChannelID, "Channel has been allowed!")
 			err := storage.AllowChannel(db, m.ChannelID)
 			if err != nil {
